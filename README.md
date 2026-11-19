@@ -5,7 +5,7 @@
 ## 当前状态
 
 - 已提供：`long-distance-cycling-route-planner` Skill v0.67、地图模板、路线诊断与高德响应组装脚本、自动化测试。
-- 规划中：面向普通骑手的微信小程序 MVP，详见 [产品路线](docs/PRODUCT_PLAN.zh-CN.md)。
+- 规划中。
 - 尚未提供：可直接发布的小程序、后台持续导航、真正离线底图、对任意路线可骑行性的保证。
 
 这个项目明确区分三件事：
@@ -54,12 +54,9 @@ long-distance-cycling-route-planner/
   references/        生成、分段、交付与验收规范
   scripts/           路线诊断、组装和测试脚本
   assets/            通用交互地图外壳与 Leaflet 资源
-docs/
-  PRODUCT_PLAN.zh-CN.md
 ```
 
 ## 开源协议
 
 项目采用 [MIT License](LICENSE)。`assets/vendor/leaflet` 保留其原始 BSD-2-Clause 许可文件。
-
 
