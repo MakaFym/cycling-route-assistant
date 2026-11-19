@@ -1,0 +1,4 @@
+interface:
+  display_name: "长距离骑行路线生成器"
+  short_description: "把现有路书转换成固定路线、低切换高德导航与可执行骑行计划"
+  default_prompt: "使用 $long-distance-cycling-route-planner，根据我的路书和实际起点生成有距离依据、低切换频率的骑行计划与交互地图。"

@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {assemble} from './assemble-amap-map.mjs';
+function fixture(){const points=[[0,0],[0,.01]],m={actualStart:points[0],actualEnd:points[1],queriedAt:'2026-10-10',legs:[{type:'main',name:'SYNTHETIC one road',reason:'Synthetic no extra switch',start:points[0],end:points[1],referencePoints:points}],review:{routeAndRoadsChecked:true,navDeletionChecked:true,accessChecked:true,checkedAt:'2026-10-10',evidence:'SYNTHETIC test-only attestation, not genuine road or device acceptance'}};const r={status:'1',infocode:'10000',route:{paths:[{distance:'1112',steps:[{polyline:'0,0;0.01,0'}]}]}};return {m,r};}
+test('a key without coordinates is omitted, non-positional safety notes remain valid',()=>{
+ const {m,r}=fixture();m.cues=[{name:'SYNTHETIC missing position',kind:'key'},{name:'SYNTHETIC stop before operation',kind:'safety'}];const x=assemble(m,[r]);assert.equal(x.report.status,'complete');assert.equal(x.data.cues.length,1);assert.equal(x.data.cues[0].kind,'safety');assert.match(x.report.warnings.join(' '),/cues item 1 has invalid point/);
+});
+test('explicitly unverified keys become independently hidden candidates, not formal keys or navigation tasks',()=>{
+ const {m,r}=fixture(),candidate={name:'SYNTHETIC unverified corner',kind:'key',point:[0,.004],verified:false};m.cues=[candidate,{name:'SYNTHETIC checked branch',kind:'key',point:[0,.006]}];m.supplies=[{name:'SYNTHETIC optional water',point:[0,.005]}];m.turnCandidates=[{...candidate,kind:'candidate'}];
+ const x=assemble(m,[r]);assert.equal(x.data.cues.length,1);assert.equal(x.data.cues[0].name,'SYNTHETIC checked branch');assert.equal(x.data.turnCandidates.length,1);assert.equal(x.data.turnCandidates[0].verified,false);assert.equal(x.data.supplies.length,1);assert.equal(x.data.navSegments.length,1);assert.equal(x.data.totalKm,1.112);assert.match(x.report.warnings.join(' '),/downgraded/);
+});

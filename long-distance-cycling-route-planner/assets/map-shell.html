@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>骑行交互地图</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}html,body,#map{height:100%;margin:0;font-family:system-ui,"Microsoft YaHei",sans-serif}#map{background:#dce8e9}
+.panel{position:fixed;z-index:1000;left:12px;top:12px;width:min(356px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;background:#fffffff2;color:#183248;border:1px solid #c9d8df;border-radius:16px;box-shadow:0 10px 30px #16364b35;padding:15px}
+h1{font-size:19px;line-height:1.3;margin:0 0 5px}h2{font-size:14px;margin:0}p{margin:5px 0 9px;line-height:1.4}.sub,.note{font-size:12px;color:#52697a}.state{font-size:12px;font-weight:700;padding:6px 9px;border-radius:8px;background:#e8f5f1;color:#14594d}.state.draft{background:#fff0d9;color:#805008}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0}.stat{border:1px solid #d9e5ea;border-radius:9px;padding:8px}.stat b{font-size:16px;display:block}.stat small{font-size:11px;color:#536b7c}
+.primary{display:block;width:100%;min-height:47px;background:#e65a35;color:white;border:0;border-radius:10px;padding:11px;text-align:center;text-decoration:none;font-size:15px;font-weight:750;line-height:1.3}
+.primary.disabled{background:#8d9aa5;pointer-events:none}.buttons{display:flex;gap:7px;margin:8px 0}.buttons button{flex:1;border:1px solid #bdd0d9;background:white;border-radius:8px;padding:8px;font-weight:650;color:#16445e}
+details{border-top:1px solid #d9e5ea;padding:9px 0}summary{cursor:pointer;font-size:13px;font-weight:750}ul{padding-left:18px;margin:7px 0}li{font-size:12px;line-height:1.5;margin:7px 0}li a{color:#b53d20;font-weight:700}
+.legend{font-size:11px;color:#355366}.legend span{display:inline-block;width:13px;height:4px;vertical-align:middle;margin:0 4px 0 8px}
+.legend .navLegend{width:20px;height:20px;line-height:18px;border-radius:7px 7px 7px 2px;transform:rotate(-45deg);background:#174e73;border:2px solid #fff;box-shadow:0 0 0 1px #174e73;color:#fff;text-align:center;font-weight:800}.legend .navLegend b{display:block;transform:rotate(45deg);font-size:10px}
+.nav-endpoint-icon{background:none!important;border:0!important}.nav-endpoint-pin{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:10px 10px 10px 3px;transform:rotate(-45deg);background:#174e73;border:3px solid #fff;box-shadow:0 1px 5px #102b3a99;color:#fff;font:800 13px/1 system-ui,"Microsoft YaHei",sans-serif}.nav-endpoint-pin b{transform:rotate(45deg)}.nav-endpoint-pin.active{background:#ef642f;box-shadow:0 0 0 2px #ef642f,0 2px 7px #102b3aaa}.nav-endpoint-pin.candidate{background:#fff6df;border-color:#9b6a18;color:#714a0d;box-shadow:0 0 0 1px #9b6a18,0 1px 5px #102b3a77}
+.routePrompt{font-size:12px;color:#183248;margin:6px 0}.routePrompt span{color:#52697a}
+@media(max-width:600px){.panel{left:8px;right:8px;top:auto;bottom:max(8px,env(safe-area-inset-bottom));width:auto;max-height:46vh;padding:10px 12px}h1{font-size:15px}.sub{display:none}.stats{margin:6px 0}.stat{padding:5px 7px}.stat b{font-size:14px}.stat small{font-size:10px}.primary{min-height:45px}.panel details:not([open]){padding:6px 0}.leaflet-bottom.leaflet-left,.leaflet-bottom.leaflet-right{bottom:48vh}}
+@media(max-width:600px),(max-height:700px){.panel{display:flex;flex-direction:column}.panel>*{flex-shrink:0}.state{order:1}.primary{order:2}.buttons{order:3}.stats{order:4}.routePrompt{order:5}.panel details{order:6}.panel .note{order:7}.panel .legend{order:8}}
+</style></head><body><div id="map"></div><aside class="panel">
+<h1 id="title"></h1><p class="sub" id="subtitle"></p><div class="state" id="state"></div>
+<div class="stats"><div class="stat"><b id="total"></b><small id="basis"></small></div><div class="stat" id="nextStat"><b id="next"></b><small>下一导航终点</small></div><div class="stat"><b id="offroute">定位未开启</b><small id="offrouteBasis"></small><small id="referenceGap" style="display:block">原线距离：定位后显示</small></div><div class="stat"><b id="remaining">—</b><small id="remainingBasis"></small></div></div>
+<p class="routePrompt"><b>下一关键点：</b><span id="nextCue">定位后显示</span> <span id="accuracy"></span></p>
+<a id="nextAmap" class="primary" target="_blank" rel="noopener noreferrer">高德导航至下一终点</a>
+<div class="buttons"><button id="locate">我的位置</button><button id="fit">全程</button><button id="focus">当前段</button></div>
+<details open><summary id="segmentTitle">导航分段</summary><ul id="segments"></ul></details>
+<details><summary>路线组成（不增加导航切换）</summary><ul id="composition"></ul></details>
+<details id="coverageSection" hidden><summary>路线贴合验收</summary><ul id="coverage"></ul></details>
+<details id="gapSection" hidden open><summary>高德路网断点</summary><ul id="routeGaps"></ul></details>
+<details><summary>关键点与风险</summary><ul id="cues"></ul></details>
+<details><summary>补给与休息</summary><ul id="supplies"></ul></details>
+<details><summary>待处理与实机验证</summary><ul id="checks"></ul></details>
+<details id="optionalSection" hidden><summary>可选支线（不计入主线）</summary><label><input type="checkbox" id="showOptions"> 在地图显示</label><ul id="options"></ul></details>
+<details id="candidateSection" hidden><summary>未核实转向候选</summary><label><input type="checkbox" id="showCandidates"> 在地图显示</label><ul id="candidates"></ul></details>
+<p class="note" id="note"></p><div class="legend"><label id="outboundLegendItem"><span style="background:#df6845"></span>去程接驳</label><label id="mainLegendItem"><span style="background:#227eb5"></span><span id="mainLegend">主线</span></label><label id="returnLegendItem"><span style="background:#744aa8"></span><span id="returnLegend">终点接驳</span></label><label id="navEndpointLegend" hidden><span class="navLegend"><b>1</b></span><span id="navEndpointLegendText">导航分段终点</span></label><label id="referenceLegend" hidden><span style="background:#b92f4d"></span>固定参考线（非导航证据）</label><label id="gapLegend" hidden><span style="background:#f08b24"></span>高德路网断点</label></div>
+</aside><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
+const D=__ROUTE_DATA_JSON__;
+const $=id=>document.getElementById(id);
+const referenceOnly=D.mode==="gpx-only-reference";
+const returnLabel=D.topology==='loop'?'返程接驳':'终点接驳';
+$("returnLegend").textContent=returnLabel;
+const safePopup=text=>{const span=document.createElement("span");span.textContent=text;return span};
+const R=Math.PI/180;
+function gcj(lat,lng){if(lng<72.004||lng>137.8347||lat<.8293||lat>55.8271)return[lat,lng];let x=lng-105,y=lat-35,a=-100+2*x+3*y+.2*y*y+.1*x*y+.2*Math.sqrt(Math.abs(x)),b=300+x+2*y+.1*x*x+.1*x*y+.1*Math.sqrt(Math.abs(x));a+=(20*Math.sin(6*x*Math.PI)+20*Math.sin(2*x*Math.PI))*2/3+(20*Math.sin(y*Math.PI)+40*Math.sin(y/3*Math.PI))*2/3+(160*Math.sin(y/12*Math.PI)+320*Math.sin(y*Math.PI/30))*2/3;b+=(20*Math.sin(6*x*Math.PI)+20*Math.sin(2*x*Math.PI))*2/3+(20*Math.sin(x*Math.PI)+40*Math.sin(x/3*Math.PI))*2/3+(150*Math.sin(x/12*Math.PI)+300*Math.sin(x*Math.PI/30))*2/3;let e=.00669342162296594323,A=6378245,s=Math.sin(lat*R),m=1-e*s*s,k=Math.sqrt(m);return[lat+a*180/((A*(1-e))/(m*k)*Math.PI),lng+b*180/(A/k*Math.cos(lat*R)*Math.PI)]}
+function hav(a,b){let d=(b[0]-a[0])*R,e=(b[1]-a[1])*R,q=Math.sin(d/2)**2+Math.cos(a[0]*R)*Math.cos(b[0]*R)*Math.sin(e/2)**2;return 6371008.8*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))}
+function amap(a,b){let y=gcj(...b);return "https://uri.amap.com/navigation?from=&to="+encodeURIComponent(y[1].toFixed(6)+","+y[0].toFixed(6))+"&mode=ride&src=codex.cycling.planner&callnative=1"}
+const parts=referenceOnly?[]:D.navigationRouteParts||D.routeParts||[],segments=referenceOnly?[]:D.navSegments||[],colors={outbound:"#df6845",main:"#227eb5",return:"#744aa8",combined:"#227eb5"};
+const hasAmapEvidence=parts.some(p=>p.distanceEvidence?.type?.startsWith("amap"));
+const map=L.map("map",{zoomControl:false,preferCanvas:true}).setView([31.2,120.9],10);L.control.zoom({position:"bottomright"}).addTo(map);
+if(!referenceOnly&&D.tileUrl!==null)L.tileLayer(D.tileUrl||"https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",{subdomains:"1234",maxZoom:D.tileUrl?19:18,attribution:D.tileAttribution||"© 高德地图"}).addTo(map);
+const localRoadLayer=L.layerGroup();
+for(const road of referenceOnly?[]:D.localRoads||[])if(road.points?.length>1)L.polyline(road.points.map(q=>gcj(...q)),{color:"#a9b7bd",weight:road.highway==="cycleway"?2:1,opacity:.7})
+  .bindPopup(safePopup((road.name||"未命名道路")+" · 本地 OSM："+road.highway+"（非导航证据）")).addTo(localRoadLayer);
+if(!referenceOnly&&(D.localRoads||[]).length){localRoadLayer.addTo(map);map.attributionControl.addAttribution("本地 OSM © OpenStreetMap contributors；道路现状未核实")}
+let full=[],lines=[];
+for(const p of parts){let pts=(p.points||[]).map(q=>gcj(...q));if(pts.length<2)continue;let line=L.polyline(pts,{color:colors[p.type]||"#227eb5",weight:5,opacity:.95,dashArray:p.verified===false?"7 5":null}).addTo(map).bindPopup(safePopup(p.name+" · "+(p.distanceKm==null?"里程待核实":p.distanceKm+" km")+" · "+p.basis));lines.push(line);for(const q of p.points||[]){if(!full.length||hav(full[full.length-1],q)>1)full.push(q)}}
+const referenceLines=[];
+for(const x of D.referenceRoutes||[])if(x.points?.length>1){
+ const line=L.polyline(x.points.map(q=>gcj(...q)),{color:"#b92f4d",weight:3,opacity:.85,dashArray:"3 4"})
+  .addTo(map).bindPopup(safePopup(x.name+" · 来源："+x.source+" · "+x.basis));
+ referenceLines.push(line);
+}
+$('gapSection').hidden=!((D.routeEngineGaps||[]).length);$('gapLegend').hidden=$('gapSection').hidden;
+const gapLines=[],gapMarkers=[];
+for(const gap of D.routeEngineGaps||[]){
+ const gapLine=L.polyline((gap.points||[gap.start,gap.end]).map(q=>gcj(...q)),{color:'#f08b24',weight:6,opacity:1,dashArray:'2 7',className:'route-engine-gap-line'}).addTo(map)
+  .bindPopup(safePopup(gap.name+' · GPX约 '+gap.referenceKm+' km；高德绕行 '+gap.amapDistanceKm+' km · '+gap.evidence));
+ gapLines.push(gapLine);
+ const mid=(gap.points||[gap.start,gap.end])[Math.floor((gap.points||[gap.start,gap.end]).length/2)];
+ const gapMarker=L.circleMarker(gcj(...mid),{radius:8,color:'#9c4b00',weight:3,fillColor:'#fff2d8',fillOpacity:1,className:'route-engine-gap-marker'}).addTo(map).bindTooltip('高德路网断点：'+gap.name);gapMarkers.push(gapMarker);
+ list('routeGaps',[{name:gap.name,note:'GPX约 '+gap.referenceKm+' km；高德同端点绕行 '+gap.amapDistanceKm+' km。'+gap.note}]);
+}
+window.routeEngineGapLayers={lines:gapLines,markers:gapMarkers};
+$("referenceLegend").hidden=!referenceLines.length;
+if(referenceLines.length){
+ const overlays={};
+ if(lines.length)overlays[hasAmapEvidence?'高德算路线（实线/长虚线）':'道路／路书候选（未核实）']=L.layerGroup(lines).addTo(map);
+ overlays['GPX原始参考（红色短虚线）']=L.layerGroup(referenceLines).addTo(map);
+ if(gapLines.length)overlays['高德路网断点（橙色点虚线）']=L.layerGroup(gapLines).addTo(map);
+ L.control.layers(null,overlays,{position:'topright',collapsed:window.matchMedia('(max-width:600px)').matches}).addTo(map);
+}
+$("mainLegend").textContent=hasAmapEvidence?(D.status==="complete"?"高德导航方案":"高德导航候选（未验收）"):(D.status==="complete"?"已核实路线":"道路／路书候选（未核实）");
+if(referenceOnly){$("outboundLegendItem").hidden=true;$("mainLegendItem").hidden=true;$("returnLegendItem").hidden=true;$("nextStat").hidden=true;$("focus").hidden=true}
+for(const x of referenceOnly?[]:D.researchMarkers||[])if(x.point)L.circleMarker(gcj(...x.point),{radius:7,color:"#806325",fillOpacity:.9})
+  .addTo(map).bindPopup(safePopup(x.name));
+function fitBoundsToPanel(bounds,maxZoom=16){
+  const mobile=window.matchMedia("(max-width:600px)").matches;
+  const panel=document.querySelector(".panel");
+  const reserved=mobile?Math.min(window.innerHeight*.46,panel.getBoundingClientRect().height)+24:0;
+  const controlWidth=Math.max(0,...[...document.querySelectorAll('.leaflet-control-zoom,.leaflet-control-layers')].map(x=>x.getBoundingClientRect().width));
+  const right=controlWidth+24;
+  const attribution=document.querySelector('.leaflet-control-attribution');
+  const attributionBottom=attribution?Math.max(0,window.innerHeight-attribution.getBoundingClientRect().top)+16:24;
+  const bottom=Math.max(24,reserved,attributionBottom);
+  map.fitBounds(bounds,{paddingTopLeft:mobile?[24,24]:[panel.getBoundingClientRect().width+28,24],paddingBottomRight:[right,bottom],maxZoom,animate:false});
+}
+function fitRoute(){
+  if(!lines.length&&!referenceLines.length&&!gapLines.length)return;
+  fitBoundsToPanel(L.featureGroup([...lines,...referenceLines,...gapLines]).getBounds());
+}
+function fitCurrentSegment(){
+  const s=segments[chosen];
+  const points=s?.points||parts.find(p=>p.name===s?.name)?.points;
+  if(points?.length>1)fitBoundsToPanel(L.latLngBounds(points.map(q=>gcj(...q))),17);
+  else fitRoute();
+}
+if(lines.length)fitRoute();else map.setView([31.2,120.9],10);
+$("title").textContent=D.title||"骑行交互地图";$("subtitle").textContent=D.subtitle||"固定路线与高德分段导航";
+let complete=D.status==="complete";$("state").textContent=complete?"完整路线 · 出发前核对现场路况":"未完成草稿："+(D.draftSummary||"道路接驳及全线导航距离待核实");if(!complete){$("state").classList.add("draft");$("state").title="未完成研究草稿，不可作为完整导航图"}
+$("offrouteBasis").textContent=complete?"距高德方案":referenceOnly?"未生成道路候选":hasAmapEvidence?"距高德候选（未验收）":"距候选路线（未验收）";
+$("remainingBasis").textContent=complete?"沿高德方案剩余":"未验收，不估算剩余";
+const referenceLabel=D.originalGpx?"距GPX原线":"距路书参考";
+$("referenceGap").textContent=referenceLabel+"：定位后显示";
+$("referenceLegend").lastChild.textContent=D.originalGpx?"GPX原始路线（非导航里程）":"路书参考（非导航证据）";
+$("total").textContent=complete?(D.totalApproximate?"约 ":"")+D.totalKm+" km":"总里程待核实";$("basis").textContent=D.distanceBasis||"距离来源未说明";
+$("segmentTitle").textContent=complete?"导航分段（"+segments.length+" 段；途中切换约 "+Math.max(0,segments.length-1)+" 次）":referenceOnly?"GPX-only 参考（无导航分段）":"候选分段（"+segments.length+" 段；导航切换次数待核实）";
+let chosen=0,guidanceUncertain=false;
+const navEndpointLayer=L.layerGroup(),navEndpointMarkers=[];
+function navEndpointIcon(index,active=false){return L.divIcon({className:"nav-endpoint-icon",html:'<span class="nav-endpoint-pin '+(active?'active ':'')+(complete?'':'candidate')+'" data-segment-index="'+index+'"><b>'+(index+1)+'</b></span>',iconSize:[30,30],iconAnchor:[15,27],popupAnchor:[0,-26]})}
+function selectSegment(index,focus=false){chosen=index;guidanceUncertain=false;render();if(focus)fitCurrentSegment()}
+for(const [i,x] of segments.entries())if(Array.isArray(x.end)){
+ const label=(complete?'导航分段 ':'候选分段 ')+(i+1)+' 终点：'+x.name+(Number.isFinite(x.distanceKm)?' · '+x.distanceKm+' km':'');
+ const endpoint=L.marker(gcj(...x.end),{icon:navEndpointIcon(i,i===chosen),zIndexOffset:700,riseOnHover:true,keyboard:true,title:label})
+  .bindTooltip(label,{direction:'top',offset:[0,-24]}).bindPopup(safePopup(label+(x.reason?' · '+x.reason:'')))
+  .on('click',()=>selectSegment(i,true)).addTo(navEndpointLayer);
+ navEndpointMarkers.push(endpoint);
+}
+if(navEndpointMarkers.length){navEndpointLayer.addTo(map);$("navEndpointLegend").hidden=false;$("navEndpointLegendText").textContent=complete?"导航分段终点（编号）":"候选导航终点（编号）"}
+function render(){let s=segments[chosen];$("next").textContent=complete?(s?s.name:"无"):referenceOnly?"未生成导航终点":"导航终点待核实";let btn=$("nextAmap");if(complete&&!guidanceUncertain&&s&&s.start&&s.end){btn.href=amap(s.start,s.end);btn.classList.remove("disabled");btn.textContent="高德导航至 "+s.name}else{btn.removeAttribute("href");btn.classList.add("disabled");btn.textContent=guidanceUncertain?"定位不确定 · 停车核对分段":complete?"高德导航段待核实":referenceOnly?"仅供 GPX 对照 · 暂不可导航":"路线未完成 · 暂不可导航"}navEndpointMarkers.forEach((m,i)=>{const active=i===chosen;m.setIcon(navEndpointIcon(i,active));m.setZIndexOffset(active?900:700)});$("segments").innerHTML="";segments.forEach((x,i)=>{let li=document.createElement("li"),b=document.createElement("button");b.textContent=(complete?"":"候选 ")+(i+1)+". "+x.name+" · "+x.distanceKm+" km";b.style.cssText="border:0;background:none;color:#174e73;text-align:left;cursor:pointer;font-weight:700";b.onclick=()=>selectSegment(i,true);li.appendChild(b);if(complete&&x.start&&x.end){let a=document.createElement("a");a.href=amap(x.start,x.end);a.target="_blank";a.rel="noopener noreferrer";a.textContent="　打开高德";li.appendChild(a)}$("segments").appendChild(li)})}render();function list(id,items){for(const x of items||[]){let li=document.createElement("li");li.textContent=x.name+(x.km!=null?" · "+x.km+" km":"")+(x.note?" · "+x.note:"");$(id).appendChild(li);if(x.point)L.circleMarker(gcj(...x.point),{radius:6,color:id==="supplies"?"#268b57":"#c03434",fillOpacity:1}).addTo(map).bindPopup(safePopup(li.textContent))}}
+list("cues",referenceOnly?[]:D.cues);list("supplies",referenceOnly?[]:D.supplies);
+list('composition',(referenceOnly?[]:D.routeParts||[]).map(p=>({name:({outbound:'去程接驳',main:'路书主段',return:returnLabel}[p.type]||p.type)+' · '+p.name,note:(Number.isFinite(p.distanceKm)?p.distanceKm+' km':'里程待核实')+' · '+p.basis})));
+if(D.mainRouteCoverage){
+ const c=D.mainRouteCoverage,r=c.referenceCoveredByAmap,a=c.amapCloseToReference;
+ $("coverageSection").hidden=false;
+ const deviation=x=>'连续超出200米 '+(Number.isFinite(x.longestBeyond200mKm)?x.longestBeyond200mKm+' km':'待计算')+' · 连续超出500米 '+(Number.isFinite(x.longestBeyond500mKm)?x.longestBeyond500mKm+' km':'待计算');
+ list('coverage',[{name:'原GPX到高德',note:'200米内 '+r.within200mPct+'% · 500米内 '+r.within500mPct+'% · '+deviation(r)},{name:'高德到原GPX',note:'200米内 '+a.within200mPct+'% · 500米内 '+a.within500mPct+'% · '+deviation(a)},{name:'计算口径',note:c.basis}]);
+}
+const ownerLabels={agent:'可继续自主核查',device:'需实机测试',field:'需现场证据',account:'账号条件', 'user-choice':'需路线选择'};
+list('checks',(D.reviewStatus?.pendingChecks||[]).map(x=>({name:x.name??x.description??'待核查项未命名',note:(ownerLabels[x.owner]||x.owner)+'：'+x.action})));
+if(D.reviewStatus?.deviceAcceptance?.status==='not-tested')list('checks',[{name:'手机高德与真实定位尚未实测',note:D.reviewStatus.deviceAcceptance.action}]);
+const optionalLayer=L.layerGroup(),candidateLayer=L.layerGroup();
+for(const x of referenceOnly?[]:D.optionalRoutes||[]){
+  const li=document.createElement("li");li.textContent=x.name+" · "+(x.distanceKm==null?"里程待核实":x.distanceKm+" km")+(x.note?" · "+x.note:"");
+  $("options").appendChild(li);
+  if(Array.isArray(x.points)&&x.points.length>1)L.polyline(x.points.map(q=>gcj(...q)),{color:"#8b58a1",weight:4,dashArray:"8 6"})
+    .bindPopup(safePopup(li.textContent)).addTo(optionalLayer);
+}
+for(const x of referenceOnly?[]:D.turnCandidates||[]){
+  const li=document.createElement("li");li.textContent=x.name+(x.note?" · "+x.note:"");$("candidates").appendChild(li);
+  if(Array.isArray(x.point))L.circleMarker(gcj(...x.point),{radius:5,color:"#a77a28",fillOpacity:.7})
+    .bindPopup(safePopup(li.textContent)).addTo(candidateLayer);
+}
+$("optionalSection").hidden=referenceOnly||!((D.optionalRoutes||[]).length);
+$("candidateSection").hidden=referenceOnly||!((D.turnCandidates||[]).length);
+$("showOptions").onchange=e=>e.target.checked?optionalLayer.addTo(map):map.removeLayer(optionalLayer);
+$("showCandidates").onchange=e=>e.target.checked?candidateLayer.addTo(map):map.removeLayer(candidateLayer);
+$("note").textContent=(D.note||"")+" 停车后再操作地图。"+(referenceOnly?"GPX-only参考预览，不请求在线底图；缺少详细底图和道路服务，不是导航地图。":D.tileUrl===null?"本地道路研究预览，不请求在线底图；不是完整离线导航地图。":"高德可能重新算路；详细底图和高德链接需要联网。");
+fitRoute();
+if(window.ResizeObserver)new ResizeObserver(fitRoute).observe(document.querySelector(".panel"));
+$("fit").onclick=fitRoute;
+$("focus").onclick=fitCurrentSegment;$("focus").disabled=!segments.length;
+$("segments").addEventListener("click",e=>{if(e.target.closest("button"))fitCurrentSegment()});
+window.addEventListener("resize",()=>{map.invalidateSize();fitRoute()});
+let marker;
+function projectToRoute(point,routeParts=parts){
+  let best={distance:Infinity,along:0,navigationAlong:0},candidates=[],covered=0,navigationCovered=0;
+  // Only project onto edges actually displayed within each part, never invisible join chords.
+  for(const part of routeParts){
+   const points=part.points||[];
+   const geometryLength=points.slice(1).reduce((s,p,i)=>s+hav(points[i],p),0);
+   const distanceScale=Number.isFinite(part.distanceKm)&&geometryLength>0?part.distanceKm*1000/geometryLength:0;
+   for(let i=1;i<points.length;i++){
+    const a=points[i-1],b=points[i],sx=111320*Math.cos(point[0]*R),sy=110540;
+    const dx=(b[1]-a[1])*sx,dy=(b[0]-a[0])*sy,x=(point[1]-a[1])*sx,y=(point[0]-a[0])*sy;
+    const t=Math.max(0,Math.min(1,(x*dx+y*dy)/(dx*dx+dy*dy||1)));
+    const length=hav(a,b),distance=Math.hypot(x-t*dx,y-t*dy),along=covered+t*length;
+    const navigationAlong=navigationCovered+t*length*distanceScale;
+    candidates.push({distance,along});if(distance<best.distance)best={distance,along,navigationAlong};
+    covered+=length;navigationCovered+=length*distanceScale;
+   }
+  }
+  return {...best,total:covered,navigationTotal:navigationCovered,candidates};
+}
+const keyCues=(D.cues||[]).filter(x=>x.kind==="key"&&x.verified!==false&&Array.isArray(x.point))
+  .map(x=>({...x,position:projectToRoute(x.point)})).filter(x=>x.position.distance<=100)
+  .sort((a,b)=>a.position.along-b.position.along);
+function navigationBoundaries(items){
+  let covered=0;
+  return items.map(item=>{
+    const points=item.points||[];
+    if(points.length<2)return Infinity;
+    const length=points.slice(1).reduce((s,p,i)=>s+hav(points[i],p),0);
+    if(!Number.isFinite(length)||length<=0)return Infinity;
+    covered+=length;return covered;
+  });
+}
+// An endpoint may occur twice on a loop. Its global nearest projection is not its occurrence.
+const navEnds=navigationBoundaries(segments.map((s,i)=>({...s,points:s.points||(segments.length===parts.length?parts[i]?.points:[])})));
+$("nextCue").textContent=keyCues.length?"定位后显示":"无已核实关键点";
+function clearLocation(message){
+  if(marker){map.removeLayer(marker);marker=null}
+  $("offroute").textContent=message;
+  $("referenceGap").textContent=referenceLabel+"：定位不可用";
+  $("accuracy").textContent="";
+  $("remaining").textContent=complete?"暂不估算":"待验收";
+  $("nextCue").textContent=referenceOnly?"定位不可用；GPX 仅作人工对照":"定位不可用，请停车后手动选择分段";
+  guidanceUncertain=!referenceOnly;render();
+}
+$("locate").onclick=()=>{
+  if(!navigator.geolocation){clearLocation("不支持定位");return}
+  navigator.geolocation.getCurrentPosition(p=>{
+    const here=[p.coords.latitude,p.coords.longitude],hp=gcj(...here);
+    const accuracy=Number.isFinite(p.coords.accuracy)?p.coords.accuracy:Infinity,hit=projectToRoute(here);
+    if(marker)map.removeLayer(marker);
+    marker=L.circleMarker(hp,{radius:8,color:"#143f7a",fillColor:"#3ebbe3",fillOpacity:1})
+      .addTo(map).bindPopup(safePopup("我的位置，GPS 精度约 "+(Number.isFinite(accuracy)?Math.round(accuracy)+" m":"未知")));
+    map.panTo(hp);
+    $("accuracy").textContent=Number.isFinite(accuracy)?"· GPS精度约 "+Math.round(accuracy)+" m":"· GPS精度未知";
+    const referenceHit=projectToRoute(here,D.referenceRoutes||[]);
+    $("referenceGap").textContent=referenceLabel+"："+(Number.isFinite(referenceHit.distance)?Math.round(referenceHit.distance)+" m":"无可用原线");
+    if(!Number.isFinite(hit.distance)){$("offroute").textContent=referenceOnly?"未生成道路路线":"路线缺失";$("remaining").textContent="待验收";$("nextCue").textContent=referenceOnly?"仅显示距 GPX 原线；不提供方向、拓扑或下一点指引":"无法判断";render();return}
+    $("offroute").textContent=Math.round(hit.distance)+" m";
+    if(!complete){
+      $("remaining").textContent="待验收";
+      $("nextCue").textContent=accuracy>100?"草稿未验收；GPS精度较差，请停车核对":"草稿未验收；仅显示距候选线，不提供下一点指引";
+      render();return;
+    }
+    if(complete&&hit.navigationTotal>0)$("remaining").textContent="约 "+(Math.max(0,hit.navigationTotal-hit.navigationAlong)/1000).toFixed(1)+" km";
+    const ambiguous=hit.candidates.some(x=>x.distance<=hit.distance+Math.max(30,accuracy)&&Math.abs(x.along-hit.along)>500);
+    if(ambiguous||accuracy>100||hit.distance>Math.max(100,accuracy*2)){
+      guidanceUncertain=true;$("remaining").textContent="暂不估算";
+      $("nextCue").textContent="定位不确定，请停车核对固定路线";render();return;
+    }
+    guidanceUncertain=false;
+    if(!navEnds.length||navEnds.some(x=>!Number.isFinite(x))||Math.abs(navEnds.at(-1)-hit.total)>Math.max(100,hit.total*.01)){
+      guidanceUncertain=true;$("remaining").textContent="暂不估算";
+      $("nextCue").textContent="分段几何不完整或不一致，请停车核对";render();return;
+    }
+    const cue=keyCues.find(x=>x.position.along>hit.along+30);
+    $("nextCue").textContent=cue?cue.name+"（沿线约 "+((cue.position.along-hit.along)/1000).toFixed(1)+" km）":"前方无已核实关键点";
+    const nextIndex=navEnds.findIndex(x=>x>hit.along-50);
+    if(nextIndex>=0)chosen=nextIndex;
+    render();
+  },e=>{clearLocation(e.code===1?"定位未授权":"定位失败")},
+  {enableHighAccuracy:true,timeout:12000,maximumAge:0});
+};
+</script></body></html>

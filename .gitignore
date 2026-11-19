@@ -1,0 +1,28 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Private route material and generated evidence
+private/
+local-data/
+captures/
+outputs/
+*.gpx
+*.fit
+*.tcx
+
+# Node and test artifacts
+node_modules/
+coverage/
+playwright-report/
+test-results/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
